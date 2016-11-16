@@ -1,7 +1,9 @@
-#' Make state transitions.
+#' Make state transitions using Rcpp.
 #'
 #' Take in the matrix of the states of synthetic population (created by \code{syn_pop} function)
-#' and calculate the transitions from one state to other state(s) using the transition rate(s).
+#' and calculate the transitions from one state to other state(s) using the transition probabilities [not rate(s)].
+#' The major difference from the R alone version was that instead of having the transition rate(s),
+#' transition probabilities are used. These probabilities will thus be calculated with another function.
 #'
 #' @param origin A number which represents the column index \code{s.matrix} you want to do the transition from
 #' @param new.states A numeric vector or a number which represents the column index \code{s.matrix} you want
@@ -12,13 +14,17 @@
 #'     the corresponding state. +1 indicates that the individual has become the corresponding state.
 #' @examples
 #' pop <- syn_pop(c(19,1,0,0))
-#' state_trans(1,2,.1,pop)
-#' state_trans(1,4,100,pop)
+#' stRCPP(1,2,.1,pop)
+#'
+#' @useDynLib ibmcraftr
 #'
 #' @export
 #' @importFrom stats runif
+#' @importFrom Rcpp sourceCpp
 
-state_trans <- function(origin, new.states, params, s.matrix){
+
+#sourceCpp("D:/OneDrive/Rcpp/stRCPP.cpp") #same version as in the package folder
+stRCPP <- function(origin, new.states, params, s.matrix){
   #origin   #single number
   #new.states  #a vector of length n (to index the matrix)
   #params #a vector of length m (to calculate the probabilities)
@@ -27,25 +33,15 @@ state_trans <- function(origin, new.states, params, s.matrix){
   #dimension check
   if(ncol(s.matrix) <  max(c(origin, new.states))) stop("no such states in the input matrix") #stop if the dim requested is higher than input matrix
 
-  origin_v <- s.matrix[,origin] #initializing a new vector for calculation
-  lo <- length(origin_v) #length of origin
-  org.s.matrix <- s.matrix    #keeping the original matrix ??? for what?
+  org.s.matrix <- s.matrix    #keeping the original matrix for calculating the movement
 
-  #cummulative probability
-  #probs <- 1-exp(-params*1) # calc probs from rates
+  #probs <- 1-exp(-params*1) # calc probs from rates #this will be done in the "run_state_trans" function
 
-  cum_probs <- cumprob(params) #cumprob is a seperate function to calculate the cumulative probabilities
+  #cummulative probability # a seperate function, cumprob, is now used
+  cum_probs <- cumprob(params)
 
-  last_prob <- cum_probs[1]
+  #load and run the Rcpp codes here
+  s.matrix <- stateT(origin, new.states, cum_probs, s.matrix)
 
-  for(i in new.states){
-    probs_for <- cum_probs[which(new.states==i)+1] #calculating probs_for for transition
-    rand <- runif(lo)
-
-    s.matrix[,i] <- s.matrix[,i]+(s.matrix[,origin]*(rand<probs_for)*(rand>last_prob)) #origin is used here since ??
-    s.matrix[,origin] <- s.matrix[,origin]-(s.matrix[,origin]*(rand<probs_for)*(rand>last_prob))
-    #s.matrix[,-c(new.states,origin)] <- 0 #might not do this afterall!
-    last_prob <- probs_for
-  }
   s.matrix-org.s.matrix
 }
